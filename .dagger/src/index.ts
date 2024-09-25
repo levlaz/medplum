@@ -40,14 +40,13 @@ class Medplum {
    * Run matrix build of node versions
    */
   @func()
-  buildMatrix(): Directory {
+  async buildMatrix(): Promise<string> {
     // build matrix of node versions to test
     const nodeVersions = ["18", "20"]
-    let output = dag.directory()
+    let output = ""
 
     for (const nodeVersion of nodeVersions) {
-      let build = this.build(nodeVersion).directory("/tmp")
-      output = output.withDirectory(`${nodeVersion}`, build.directory("/tmp"))
+      output += (await this.build(nodeVersion)).stdout()
     }
 
     return output
@@ -57,36 +56,22 @@ class Medplum {
    * Build job modeled from .github/workflows/build.yml
    */
   @func()
-  build(nodeVersion: string): Container {
-    const outputPath = `/tmp/node-${nodeVersion}-stdout`
-
-    return this.base(nodeVersion).
-      withMountedCache("/root/.npm", dag.cacheVolume(`cache-node-${nodeVersion}-modules`)).
-      withMountedCache("/src/node_modules", dag.cacheVolume(`cache-node-${nodeVersion}-app-modules`)).
-      withEnvVariable("MEDPLUM_BASE_URL", "__MEDPLUM_BASE_URL__").
-      withEnvVariable("MEDPLUM_CLIENT_ID", "__MEDPLUM_CLIENT_ID__").
-      withEnvVariable("MEDPLUM_REGISTER_ENABLED", "__MEDPLUM_REGISTER_ENABLED__").
-      withEnvVariable("GOOGLE_CLIENT_ID", "__GOOGLE_CLIENT_ID__").
-      withEnvVariable("RECAPTCHA_SITE_KEY", "__RECAPTCHA_SITE_KEY__").
-      withExec(["sh", "-c", "echo node version: $(node --version)"]).
-      withExec(["sh", "-c", "echo npm version: $(npm --version)"]).
-      withExec(["npm", "ci", "--maxsockets", "1"], {
-        redirectStdout: "/tmp/stdout",
-        redirectStderr: "/tmp/stderr"
-      }).
-      withExec(["npm", "run", "build"], {
-        redirectStdout: "/tmp/stdout",
-        redirectStderr: "/tmp/stderr"
-      })
-  }
-
-  // /**
-  //  * Test out custom span
-  //  */
-  // @func()
-  // async test(): Promise<string> {
-  //   return getTracer().startActiveSpan("custom-test", async () => {
-  //     return this.base().withExec(["echo", "hello"]).stdout()
-  //   })
-  // }
+  build(nodeVersion: string): Promise<Container> {
+    return getTracer().startActiveSpan(`build ${nodeVersion}`, async () => {
+      return this.base(nodeVersion).
+        withMountedCache("/root/.npm", dag.cacheVolume(`cache-${nodeVersion}-npm`)).
+        withMountedCache("/src/node_modules", dag.cacheVolume(`cache-${nodeVersion}-node-modules`)).
+        withMountedCache("/src/.turbo/cache", dag.cacheVolume(`cache-${nodeVersion}-turbo`)).
+        withEnvVariable("MEDPLUM_BASE_URL", "__MEDPLUM_BASE_URL__").
+        withEnvVariable("MEDPLUM_CLIENT_ID", "__MEDPLUM_CLIENT_ID__").
+        withEnvVariable("MEDPLUM_REGISTER_ENABLED", "__MEDPLUM_REGISTER_ENABLED__").
+        withEnvVariable("GOOGLE_CLIENT_ID", "__GOOGLE_CLIENT_ID__").
+        withEnvVariable("RECAPTCHA_SITE_KEY", "__RECAPTCHA_SITE_KEY__").
+        withExec(["sh", "-c", "echo node version: $(node --version)"]).
+        withExec(["sh", "-c", "echo npm version: $(npm --version)"]).
+        withExec(["npm", "ci", "--maxsockets", "1"]).
+        withExec(["npm", "run", "build"]).
+        withExec(["npm", "run", "lint"])
+    })
+}
 }

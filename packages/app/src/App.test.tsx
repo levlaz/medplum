@@ -22,7 +22,11 @@ async function setup(url = '/'): Promise<void> {
 }
 
 describe('App', () => {
+  // const unused = 'this var is never used'
   beforeEach(() => {
+
+
+
     jest.useFakeTimers();
   });
 
